@@ -1,11 +1,11 @@
 # DNXS Spokenword ChatterboxTTS Turbo
 
-![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/DNXSSW.png)
 
 **Open-source audiobook production system built on Resemble AI's Chatterbox Turbo.**
 
 Turn raw text into professional M4B audiobooks with voice cloning, ASR validation,
 intelligent chunking, and quality control — all running locally on your GPU.
+<img src="config/10965344.png" alt="Main Menu" width="800">
 
 ---
 
@@ -23,7 +23,7 @@ full-featured CLI are provided.
 
 ## Features
 
-![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/maingui.png)
+<img src="config/maingui.png" alt="Main Menu" width="800">
 
 - **TTS Engines** — S3Gen and T3 (Chatterbox Turbo) with FP16/TF32 mixed precision
 
@@ -43,9 +43,9 @@ full-featured CLI are provided.
 
 - **torch.compile Optimization** — optional model compilation for faster inference
 
-![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/configmenu.png)
+<img src="config/maingui.png" alt="Main Menu" width="800">
 
-![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/repairgui.png)
+<img src="config/maingui.png" alt="Main Menu" width="800">
 
 ## Requirements
 
