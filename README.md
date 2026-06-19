@@ -5,7 +5,7 @@
 
 Turn raw text into professional M4B audiobooks with voice cloning, ASR validation,
 intelligent chunking, and quality control — all running locally on your GPU.
-<img src="config/10965344.png" alt="Main Menu" width="800">
+<img src="config/DNXSSW.png" alt="LOGO" width="800">
 
 ---
 
@@ -43,9 +43,9 @@ full-featured CLI are provided.
 
 - **torch.compile Optimization** — optional model compilation for faster inference
 
-<img src="config/maingui.png" alt="Main Menu" width="800">
+<img src="config/configmenu.png" alt="Config Menu" width="800">
 
-<img src="config/maingui.png" alt="Main Menu" width="800">
+<img src="config/repairgui.png" alt="Repair Menu" width="800">
 
 ## Requirements
 
