@@ -1,0 +1,125 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                        ASR VALIDATOR QUICK START                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+📦 INSTALLATION (First Time Only)
+────────────────────────────────────────────────────────────────────────────────
+  AUTOMATIC (Recommended - Just double-click!):
+    ./run.sh
+    
+    The script will automatically:
+    • Create virtual environment (if needed)
+    • Install all dependencies (~3GB, first run only)
+    • Launch the application
+  
+  MANUAL (Advanced users):
+    cd ASR
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+
+🚀 RUNNING THE APPLICATION
+────────────────────────────────────────────────────────────────────────────────
+  EASIEST: Double-click run.sh or execute:
+    ./run.sh
+  
+  The script handles everything automatically!
+  
+  ALTERNATIVE: Manual activation + run
+    source venv/bin/activate  # Activate virtual environment
+    python3 asr_validator.py  # Run the tool
+
+📁 EXPECTED FOLDER STRUCTURE
+────────────────────────────────────────────────────────────────────────────────
+  Your_TTS_Folder/
+  ├── audio_chunks/
+  │   ├── chunk_00001.wav
+  │   ├── chunk_00002.wav
+  │   └── ...
+  └── text_chunks/
+      ├── chunk_00001.txt
+      ├── chunk_00002.txt
+      └── ...
+
+🎯 BATCH MODE (Validate All Chunks)
+────────────────────────────────────────────────────────────────────────────────
+  1. Launch application
+  2. Select "Batch Mode" from dropdown
+  3. Click "Browse..." and select your TTS folder
+  4. Set threshold (0.75 recommended)
+  5. Click "Run Validation"
+  6. Results saved to:
+     • validation.log (all results)
+     • fail.log (failed chunks only)
+
+🔍 CHUNK MODE (Test Single Chunk)
+────────────────────────────────────────────────────────────────────────────────
+  1. Launch application
+  2. Select "Chunk Mode" from dropdown
+  3. Click "Browse..." and select your TTS folder
+  4. Select a chunk from the list
+  5. Click "Test Selected Chunk"
+  6. View results in the Result panel
+  7. Results appended to chunk_test.log
+
+⚙️ SIMILARITY THRESHOLD GUIDE
+────────────────────────────────────────────────────────────────────────────────
+  0.90-1.0  → Very strict (near-perfect match)
+  0.75-0.89 → Strict (recommended for production) ⭐
+  0.60-0.74 → Moderate (allows minor differences)
+  0.30-0.59 → Lenient (testing/development)
+
+💻 SYSTEM REQUIREMENTS
+────────────────────────────────────────────────────────────────────────────────
+  Minimum:
+    • Python 3.8+
+    • 4GB RAM
+    • CPU (any modern processor)
+  
+  Recommended:
+    • Python 3.10+
+    • 8GB RAM
+    • NVIDIA GPU with 1GB+ VRAM (10x faster!)
+
+📊 OUTPUT FILES
+────────────────────────────────────────────────────────────────────────────────
+  validation.log    → All validation results with scores
+  fail.log          → Only failed chunks with explanations
+  chunk_test.log    → Individual chunk test history (Chunk Mode)
+
+❓ TROUBLESHOOTING
+────────────────────────────────────────────────────────────────────────────────
+  "Failed to load ASR model"
+    → pip install faster-whisper
+    → Check internet connection (first run downloads model)
+  
+  "No matching chunk pairs found"
+    → Verify folder has audio_chunks/ and text_chunks/
+    → Check file naming: chunk_XXXXX.wav and chunk_XXXXX.txt
+  
+  Slow performance?
+    → First chunk is slow (model loading)
+    → Use GPU for 5-10x speedup
+    → Install CUDA toolkit if you have NVIDIA GPU
+
+📚 DOCUMENTATION
+────────────────────────────────────────────────────────────────────────────────
+  README.md     → Detailed user guide
+  INSTALL.md    → Installation instructions
+  SUMMARY.md    → Technical summary and comparison
+
+🎓 FIRST TIME USERS
+────────────────────────────────────────────────────────────────────────────────
+  1. Navigate to ASR directory
+  2. Double-click run.sh (or execute: ./run.sh)
+  3. Confirm virtual environment creation (y)
+  4. Wait for dependencies to install (~5-10 minutes, one-time)
+  5. Application launches automatically
+  6. Select Batch Mode
+  7. Browse to your TTS folder
+  8. Click "Run Validation"
+  9. Check the generated validation.log
+
+That's it! Next time you run ./run.sh it starts instantly (no install).
+
+═══════════════════════════════════════════════════════════════════════════════

@@ -1,0 +1,64 @@
+# ChatterboxTTS Requirements - Complete dependency list
+# Updated for distributed deployment - handles all systems
+
+# Core ML and TTS - PyTorch (installed separately by installer based on GPU/CPU detection)
+# torch and torchaudio versions determined automatically by install.sh
+torch  # CUDA/CPU version determined by install.sh
+torchaudio>=0.13.0  # Audio processing in TTS pipeline
+transformers==4.46.3
+huggingface_hub>=0.15.0
+safetensors>=0.3.0
+
+# Audio processing - Required
+soundfile>=0.12.0
+librosa>=0.9.0
+pydub>=0.25.0
+audioread>=3.0.0
+pyloudnorm>=0.1.0  # Audio loudness normalization (required for TTS output)
+
+# ASR System - Intelligent ASR with fallback
+faster-whisper>=1.0.0  # Core ASR model loader (faster than openai-whisper)
+rapidfuzz>=3.0.0  # Fuzzy string matching for ASR validation
+num2words>=0.5.0  # Number-to-words conversion for ASR text normalization
+
+# System monitoring and resource detection
+psutil>=5.8.0
+pynvml>=11.0.0
+
+# Core scientific computing
+numpy==2.2.0
+scipy>=1.7.0
+
+# Text processing
+regex>=2023.0.0
+vaderSentiment>=3.3.0
+
+# GUI Support
+PyQt5>=5.15.0
+PyQt5-sip>=12.0.0
+pygame>=2.0.0
+
+# Progress and logging
+tqdm>=4.60.0
+
+# Configuration and utilities
+python-dotenv>=1.0.0
+
+# Optional utilities
+requests>=2.25.0
+packaging>=21.0
+
+# Core ChatterboxTTS model dependencies
+resemble-perth>=1.0.1
+omegaconf>=2.3.0
+einops>=0.6.0
+diffusers>=0.21.0
+tokenizers>=0.13.0
+conformer>=0.3.0
+s3tokenizer==0.2.0
+
+imageio-ffmpeg>=0.4.9
+
+# System binaries (auto-installed on first run, falls back to imageio-ffmpeg):
+# ffmpeg   — audio conversion, M4B output, loudness normalization
+# ffplay   — chunk audio playback in wrapper/chunk_tool

@@ -1,0 +1,15 @@
+numpy>=2.0.0
+resampy==0.4.3
+librosa==0.11.0
+s3tokenizer
+torch==2.6.0
+torchaudio==2.6.0
+transformers==4.46.3
+diffusers==0.29.0
+resemble-perth==1.0.1
+conformer==0.3.2
+safetensors==0.5.3
+auto-editor>=27.0.0
+
+[advanced-nlp]
+spacy[en_core_web_sm]>=3.4.0

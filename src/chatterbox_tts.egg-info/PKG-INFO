@@ -1,0 +1,23 @@
+Metadata-Version: 2.4
+Name: chatterbox-tts
+Version: 0.1.2
+Summary: Chatterbox: Open Source TTS and Voice Conversion by Resemble AI
+Author-email: resemble-ai <engineering@resemble.ai>
+Project-URL: Homepage, https://github.com/resemble-ai/chatterbox
+Project-URL: Repository, https://github.com/resemble-ai/chatterbox
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=2.0.0
+Requires-Dist: resampy==0.4.3
+Requires-Dist: librosa==0.11.0
+Requires-Dist: s3tokenizer
+Requires-Dist: torch==2.6.0
+Requires-Dist: torchaudio==2.6.0
+Requires-Dist: transformers==4.46.3
+Requires-Dist: diffusers==0.29.0
+Requires-Dist: resemble-perth==1.0.1
+Requires-Dist: conformer==0.3.2
+Requires-Dist: safetensors==0.5.3
+Requires-Dist: auto-editor>=27.0.0
+Provides-Extra: advanced-nlp
+Requires-Dist: spacy[en_core_web_sm]>=3.4.0; extra == "advanced-nlp"
