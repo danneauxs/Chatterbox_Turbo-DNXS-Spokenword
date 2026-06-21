@@ -26,25 +26,25 @@ def get_likely_voices_for_book(book_name, chunks_json_path=None):
     if chunks_json_path:
         voice_from_json = get_voice_from_json(chunks_json_path)
         if voice_from_json:
-            voice_path = find_voice_file_by_name(voice_from_json)
+            voice_path = find_voice_file_by_name(voice_from_json) or find_voice_in_tts_dir(voice_from_json, book_name)
             if voice_path:
                 likely_voices.append((voice_from_json, voice_path, "json_metadata"))
                 print(f"✅ Voice found in JSON: {voice_from_json}")
-    
+
     # Method 2: Check run.log file
     voice_from_log = get_voice_from_log(book_name)
     if voice_from_log:
-        voice_path = find_voice_file_by_name(voice_from_log)
+        voice_path = find_voice_file_by_name(voice_from_log) or find_voice_in_tts_dir(voice_from_log, book_name)
         if voice_path:
             # Avoid duplicates
             if not any(v[0] == voice_from_log for v in likely_voices):
                 likely_voices.append((voice_from_log, voice_path, "run_log"))
                 print(f"✅ Voice found in run.log: {voice_from_log}")
-    
+
     # Method 3: Check generated filename patterns (may find multiple)
     voices_from_files = get_voices_from_filenames(book_name)
     for voice_name in voices_from_files:
-        voice_path = find_voice_file_by_name(voice_name)
+        voice_path = find_voice_file_by_name(voice_name) or find_voice_in_tts_dir(voice_name, book_name)
         if voice_path:
             # Avoid duplicates
             if not any(v[0] == voice_name for v in likely_voices):
@@ -150,18 +150,40 @@ def get_voice_from_filename(book_name):
 def find_voice_file_by_name(voice_name):
     """Find voice file by name in Voice_Samples directory"""
     voice_files = list_voice_samples()
-    
+
     # Exact match first
     for voice_file in voice_files:
         if voice_file.stem == voice_name:
             return voice_file
-    
+
     # Partial match (case insensitive)
     voice_name_lower = voice_name.lower()
     for voice_file in voice_files:
         if voice_name_lower in voice_file.stem.lower():
             return voice_file
-    
+
+    return None
+
+
+def find_voice_in_tts_dir(voice_name, book_name):
+    """Find a TTS-ready voice file in the book's own TTS/ subdirectory.
+
+    Voice files used for a book are copied into Audiobook/<book>/TTS/ during
+    processing, so this is the most reliable source when the original voice
+    file may have come from anywhere on the system.
+    """
+    tts_dir = Path(AUDIOBOOK_ROOT) / book_name / "TTS"
+    if not tts_dir.exists():
+        return None
+    voice_name_lower = voice_name.lower()
+    # Stem prefix match first: "Peter Noble_ttsready.wav" starts with "Peter Noble"
+    for wav in tts_dir.glob("*.wav"):
+        if wav.stem.lower().startswith(voice_name_lower):
+            return wav
+    # Loose match: voice name appears anywhere in stem
+    for wav in tts_dir.glob("*.wav"):
+        if voice_name_lower in wav.stem.lower():
+            return wav
     return None
 
 

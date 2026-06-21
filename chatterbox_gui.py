@@ -3643,7 +3643,7 @@ Audio: chunk_{chunk['index']+1:05d}.wav"""
             from wrapper.chunk_synthesizer import synthesize_chunk
             revised_path = synthesize_chunk(updated_chunk, chunk_index, book_name, self.current_repair_audio_dir,
                                           revision=True, chunks_json_path=json_path,
-                                          override_voice_name=voice_name)
+                                          override_voice_name=voice_name, override_voice_path=str(voice_path))
 
             if revised_path:
                 self.log_output(f"✅ Chunk resynthesized: {revised_path}")
@@ -3938,16 +3938,17 @@ Audio: chunk_{chunk['index']+1:05d}.wav"""
 
             # Find and enable audio controls for the newly generated M4B file
             from pathlib import Path
+            from modules.file_manager import sanitize_filename
             book_path = Path(self.book_path_edit.text())
             voice_path_text = self.voice_path_edit.text()
-            
+
             if voice_path_text:
                 voice_stem = Path(voice_path_text).stem
             else:
                 voice_stem = "default-turbo"
 
             # M4B is created in Audiobook/BookName/ directory with pattern: BookName[VoiceName].m4b
-            audiobook_dir = Path("Audiobook") / book_path.name
+            audiobook_dir = Path("Audiobook") / sanitize_filename(book_path.name)
             expected_m4b_name = f"{book_path.name}[{voice_stem}].m4b"
             generated_m4b = audiobook_dir / expected_m4b_name
 

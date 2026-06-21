@@ -108,22 +108,28 @@ def get_tts_params_for_chunk(chunk):
         'temperature': temperature
     }
 
-def synthesize_chunk(chunk, index, book_name, audio_dir, revision=False, chunks_json_path=None, override_voice_name=None):
+def synthesize_chunk(chunk, index, book_name, audio_dir, revision=False, chunks_json_path=None, override_voice_name=None, override_voice_path=None):
     """Generate audio for a single chunk using specified or detected voice and TTS parameters"""
     filename = f"chunk_{index+1:05d}_rev.wav" if revision else f"chunk_{index+1:05d}.wav"
     out_path = Path(audio_dir) / filename
-    
+
     try:
         # Get device
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        
+
         # Load TTS model
         print(f"🤖 Loading TTS model for chunk synthesis...")
         model = load_optimized_model(device)
-        
+
         # Determine voice to use
-        if override_voice_name:
-            # Use explicitly provided voice
+        if override_voice_path:
+            # Use explicitly provided voice path (from repair tab TTS directory)
+            print(f"🎤 Using explicitly selected voice: {override_voice_name}")
+            voice_path = Path(override_voice_path)
+            voice_name = override_voice_name if override_voice_name else voice_path.stem
+            detection_method = "user_selected"
+        elif override_voice_name:
+            # Use explicitly provided voice name (fallback to name-based lookup)
             print(f"🎤 Using explicitly selected voice: {override_voice_name}")
             voice_path = find_voice_file_by_name(override_voice_name)
             voice_name = override_voice_name
