@@ -1,6 +1,5 @@
 # DNXS Spokenword ChatterboxTTS Turbo
 
-
 **Open-source audiobook production system built on Resemble AI's Chatterbox Turbo.**
 
 Turn raw text into professional M4B audiobooks with voice cloning, ASR validation,
@@ -20,6 +19,12 @@ The system features voice cloning from short audio samples, VADER sentiment anal
 that dynamically adjusts TTS parameters per chunk, optional ASR validation using
 faster-whisper, and intelligent resume from interruptions. Both a PyQt5 GUI and a
 full-featured CLI are provided.
+
+# <mark>**In Progreess changes:</mark>**
+
+Currently in testing: 
+
+Multi voice.  Right now I'm using a separate program to generate an input JSON file with multiple voices.  The program parses the input text, automatically generates a character list, assigns text to each character, then the user can go through and review and edit.  The final output is a JSON file that will generate an unlimited number of characters with an unlimited number of voices.  Got 30 characters in your book you can have 30 voices and make a full cast audio book.  
 
 ## Features
 
@@ -67,8 +72,6 @@ chmod +x install.sh
 ```
 
 ****IMPORTANT:  after running install. There will be a .env File created.  You must edit this file and add your Hugging Face token.  On first run of the program, the chatterbox model will be downloaded from Huggingface. It will fail without this token.
-
-
 
 ### Manual
 
