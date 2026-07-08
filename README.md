@@ -1,6 +1,6 @@
 # DNXS Spokenword ChatterboxTTS Turbo
 
-![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/DNXSSW.png)
+![](/media/danno/Team1/Chatterbox%20Turbo%20Github%20Repo/Chatterbox_Turbo-DNXS-Spokenword/config/DNXSSW.png)
 
 **Open-source audiobook production system built on Resemble AI's Chatterbox Turbo.**
 
@@ -23,7 +23,7 @@ full-featured CLI are provided.
 
 ## Features
 
-![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/maingui.png)
+![](/media/danno/Team1/Chatterbox%20Turbo%20Github%20Repo/Chatterbox_Turbo-DNXS-Spokenword/config/maingui.png)
 
 - **TTS Engines** — S3Gen and T3 (Chatterbox Turbo) with FP16/TF32 mixed precision
 
@@ -47,9 +47,9 @@ full-featured CLI are provided.
 
 - 
 
-![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/configmenu.png)
+![](/media/danno/Team1/Chatterbox%20Turbo%20Github%20Repo/Chatterbox_Turbo-DNXS-Spokenword/config/configmenu.png)
 
-![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/repairgui.png)
+![](/media/danno/Team1/Chatterbox%20Turbo%20Github%20Repo/Chatterbox_Turbo-DNXS-Spokenword/config/repairgui.png)
 
 ## Requirements
 
