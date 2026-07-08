@@ -222,18 +222,28 @@ class ASRClient:
         logging.warning(f"⏰ Timeout waiting for ASR result for {chunk_id}")
         return None
     
-    def collect_all_results(self) -> Tuple[List[Dict], List[str]]:
+    def collect_all_results(self, expected_chunk_count: int = None) -> Tuple[List[Dict], List[str]]:
         """
         Collect results for all pending chunks.
-        
+
+        Args:
+            expected_chunk_count: Total number of chunks that were supposed to be validated.
+                                  Used to detect if ASR submission was silently skipped.
+
         Returns:
             tuple: (all_results, failed_chunks)
         """
         all_results = []
         failed_chunks = []
-        
+
         print(f"⏳ Waiting for {len(self.pending_chunks)} ASR validation results...")
-        
+
+        # Guard: warn if no chunks were submitted but chunks were generated
+        if len(self.pending_chunks) == 0 and expected_chunk_count and expected_chunk_count > 0:
+            logging.warning(f"⚠️ ASR validation skipped: 0 of {expected_chunk_count} chunks were submitted — asr_client may not have been wired into the processing path")
+            print(f"⚠️ ASR validation skipped: 0 of {expected_chunk_count} chunks were submitted — asr_client may not have been wired into the processing path")
+            return all_results, failed_chunks
+
         for chunk_id in list(self.pending_chunks):
             result = self.get_result(chunk_id, timeout=60)
             if result:
@@ -257,12 +267,12 @@ class ASRClient:
                     'expected_text': 'Unknown',
                     'error': 'Timeout or daemon error'
                 })
-        
+
         if failed_chunks:
             print(f"⚠️ {len(failed_chunks)} chunks failed initial ASR validation")
         else:
             print(f"✅ All {len(all_results)} chunks passed ASR validation")
-        
+
         return all_results, failed_chunks
     
     def shutdown_daemon(self) -> bool:

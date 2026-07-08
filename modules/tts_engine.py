@@ -566,65 +566,6 @@ def get_best_available_device():
     return "cpu"
 
 
-def detect_voice_for_tts():
-    """Detect voice for TTS processing from multiple sources."""
-    import os
-    from pathlib import Path
-
-    # Priority 1: Environment variable
-    voice = os.environ.get('TTS_VOICE')
-    if voice:
-        return voice
-
-    # Priority 2: Check for chunks_info.json in current directory or parent
-    for check_dir in [Path.cwd(), Path.cwd().parent]:
-        json_path = check_dir / "chunks_info.json"
-        if json_path.exists():
-            try:
-                import json
-                with open(json_path, 'r') as f:
-                    data = json.load(f)
-                if data and isinstance(data[0], dict) and data[0].get('_metadata'):
-                    voice = data[0].get('voice_used')
-                    if voice:
-                        return voice
-            except Exception:
-                pass
-
-    # Priority 3: Default fallback
-    return "ana-rita"  # Common default voice
-
-
-def find_voice_file_for_tts(voice_name):
-    """Find voice file in Voice_Samples directory."""
-    if not voice_name:
-        return None
-
-    voice_dir = Path("/home/danno/MyApps/Turbo/Voice_Samples")
-
-    # Try exact match with .wav extension
-    voice_path = voice_dir / f"{voice_name}.wav"
-    if voice_path.exists():
-        return str(voice_path)
-
-    # Try without extension (assume .wav)
-    voice_path = voice_dir / voice_name
-    if voice_path.exists():
-        return str(voice_path)
-
-    # Try case-insensitive match with .wav
-    for file_path in voice_dir.glob("*.wav"):
-        if file_path.stem.lower() == voice_name.lower():
-            return str(file_path)
-
-    # Try case-insensitive match without extension
-    for file_path in voice_dir.glob("*"):
-        if file_path.stem.lower() == voice_name.lower():
-            return str(file_path)
-
-    return None
-
-
 def load_optimized_model(device, *, force_reload: bool = False):
     """Load TTS model with REAL performance optimizations.
 
@@ -752,26 +693,9 @@ def load_optimized_model(device, *, force_reload: bool = False):
         torch.backends.cudnn.benchmark = True
         logging.info("✅ Basic CUDNN optimization enabled")
 
-    # Prepare voice conditionals for Turbo TTS
-    if isinstance(model, ChatterboxTurboTTS):
-        voice_name = detect_voice_for_tts()
-        if voice_name:
-            voice_path = find_voice_file_for_tts(voice_name)
-            if voice_path:
-                logging.info(f"🎤 Preparing Turbo TTS voice conditionals: {Path(voice_path).name}")
-                try:
-                    model.prepare_conditionals(voice_path, exaggeration=0.0, norm_loudness=True)
-                    logging.info("✅ Voice conditionals ready")
-                except Exception as e:
-                    logging.error(f"❌ Failed to prepare voice conditionals: {e}")
-                    logging.error("Turbo TTS may fail during generation")
-            else:
-                logging.warning(f"⚠️ Voice file not found for '{voice_name}' in Voice_Samples/")
-                logging.warning("Turbo TTS may fail during generation")
-        else:
-            logging.warning("⚠️ No voice detected for Turbo TTS")
-            logging.warning("Turbo TTS may fail during generation")
-
+    # Voice conditionals are intentionally NOT prepared here: every caller follows
+    # up with prewarm_model_with_voice() or prepare_conditionals() using the
+    # actually selected voice, so a load-time guess would be redundant.
     return model
 
 # ============================================================================
@@ -1118,12 +1042,12 @@ def process_one_chunk(
     current_tts_params = tts_params.copy()
 
     # Debug: Log the initial parameters for this chunk
-    logging.info(f"🎛️ Chunk {chunk_id_str} initial TTS params: exag={current_tts_params.get('exaggeration', 'N/A'):.3f}, cfg={current_tts_params.get('cfg_weight', 'N/A'):.3f}, temp={current_tts_params.get('temperature', 'N/A'):.3f}, min_p={current_tts_params.get('min_p', 'N/A'):.3f}")
+    logging.info(f"🎛️ Chunk {chunk_id_str} initial TTS params: exag={current_tts_params.get('exaggeration', 0.0):.3f}, cfg={current_tts_params.get('cfg_weight', 0.0):.3f}, temp={current_tts_params.get('temperature', 0.0):.3f}, min_p={current_tts_params.get('min_p', 0.0):.3f}")
 
     for attempt_num in range(max_attempts):
         logging.info(f"🔁 Starting TTS for chunk {chunk_id_str}, attempt {attempt_num + 1}/{max_attempts}")
         if attempt_num > 0:
-            logging.info(f"🔧 Adjusted params: exag={current_tts_params.get('exaggeration', 'N/A'):.3f}, cfg={current_tts_params.get('cfg_weight', 'N/A'):.3f}, temp={current_tts_params.get('temperature', 'N/A'):.3f}")
+            logging.info(f"🔧 Adjusted params: exag={current_tts_params.get('exaggeration', 0.0):.3f}, cfg={current_tts_params.get('cfg_weight', 0.0):.3f}, temp={current_tts_params.get('temperature', 0.0):.3f}")
         
         wav = None
         audio_segment = None
@@ -1512,7 +1436,12 @@ def generate_enriched_chunks(text_file, output_dir, user_tts_params=None, qualit
                 "_metadata": True,
                 "voice_used": voice_name,
                 "generation_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "total_chunks": len(enriched)
+                "total_chunks": len(enriched),
+                "tts_params": {
+                    "temperature": base_temperature,
+                    "top_p": base_top_p,
+                    "repetition_penalty": base_repetition_penalty
+                }
             }
             enriched_with_metadata = [metadata] + enriched
             save_chunks(output_json_path, enriched_with_metadata)
@@ -1838,6 +1767,17 @@ def process_book_folder(book_dir, voice_path, tts_params, device, skip_cleanup=F
     # Prepare voice sample compatibility once; reload model per-batch below
     if voice_path:
         compatible_voice = ensure_voice_sample_compatibility(voice_path, output_dir=tts_dir)
+        # Store original voice path in chunks_info.json so re-generation can find it
+        _chunks_json = text_chunks_dir / "chunks_info.json"
+        if _chunks_json.exists():
+            try:
+                import json as _json
+                _data = _json.loads(_chunks_json.read_text(encoding='utf-8'))
+                if _data and isinstance(_data[0], dict) and _data[0].get('_metadata'):
+                    _data[0]['audio_prompt_path'] = str(voice_path)
+                    _chunks_json.write_text(_json.dumps(_data, indent=2, ensure_ascii=False), encoding='utf-8')
+            except Exception as _e:
+                print(f"⚠️ Could not update audio_prompt_path in chunks_info.json: {_e}")
     else:
         compatible_voice = None  # No custom voice - model will use default
 
@@ -2103,7 +2043,7 @@ def process_book_folder(book_dir, voice_path, tts_params, device, skip_cleanup=F
                             voice_path, chunk_tts_params, start_time, total_chunks,
                             punc_norm, book_dir.name, log_run, log_path, device,
                             model, asr_model, boundary_type=boundary_type,
-                            enable_asr=asr_enabled
+                            enable_asr=asr_enabled, asr_client=asr_client
                         ))
 
                     # Wait for micro-batch to complete
@@ -2186,7 +2126,7 @@ def process_book_folder(book_dir, voice_path, tts_params, device, skip_cleanup=F
     failed_chunks = []
     if asr_client:
         print("⏳ Collecting ASR validation results...")
-        _, failed_chunks = asr_client.collect_all_results()
+        _, failed_chunks = asr_client.collect_all_results(expected_chunk_count=total_chunks)
         
         # Write initial failures report
         if failed_chunks:

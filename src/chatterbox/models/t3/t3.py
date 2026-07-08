@@ -494,8 +494,6 @@ class T3(nn.Module):
             cfg_weight=0.0,
         )
 
-        generated_speech_tokens = []
-
         llm_outputs = self.tfmr(
             inputs_embeds=embeds,
             use_cache=True
@@ -511,7 +509,9 @@ class T3(nn.Module):
         probs = F.softmax(processed_logits, dim=-1)
         next_speech_token = torch.multinomial(probs, num_samples=1)
 
-        generated_speech_tokens.append(next_speech_token)
+        # Single growing (1, n) tensor of generated ids; appended once per step (O(n) total)
+        # instead of re-concatenating a python list of every past token each step (O(n^2)).
+        generated_ids = next_speech_token
         current_speech_token = next_speech_token
 
         for _ in tqdm(range(max_gen_len)):
@@ -527,21 +527,17 @@ class T3(nn.Module):
             past_key_values = llm_outputs.past_key_values
             speech_logits = self.speech_head(hidden_states)
 
-            input_ids = torch.cat(generated_speech_tokens, dim=1)
-            processed_logits = logits_processors(input_ids, speech_logits[:, -1, :])
-            if torch.all(processed_logits == -float("inf")):
-                print("Warning: All logits are -inf")
-                break
+            processed_logits = logits_processors(generated_ids, speech_logits[:, -1, :])
 
             probs = F.softmax(processed_logits, dim=-1)
             next_speech_token = torch.multinomial(probs, num_samples=1)
 
-            generated_speech_tokens.append(next_speech_token)
+            generated_ids = torch.cat([generated_ids, next_speech_token], dim=1)
             current_speech_token = next_speech_token
             if torch.all(next_speech_token == self.hp.stop_speech_token):
                 break
 
-        all_tokens = torch.cat(generated_speech_tokens, dim=1)
+        all_tokens = generated_ids
 
         # Remove EOS token if present
         if all_tokens.size(1) > 0 and all_tokens[0, -1] == self.hp.stop_speech_token:

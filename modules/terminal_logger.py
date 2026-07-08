@@ -203,6 +203,20 @@ class TerminalLogger:
         if self.also_print:
             self.original_stdout.flush()
 
+    def isatty(self):
+        """Report a non-interactive stream so libraries probing sys.stdout (e.g. torch dynamo's
+        compile logging) skip terminal-only formatting instead of crashing on a missing attribute."""
+        return False
+
+    def fileno(self):
+        """Delegate to the real stdout's file descriptor for libraries that need one."""
+        return self.original_stdout.fileno()
+
+    @property
+    def encoding(self):
+        """Expose the underlying stream's encoding; some libraries read sys.stdout.encoding."""
+        return getattr(self.original_stdout, "encoding", "utf-8")
+
     def write_file_only(self, text):
         """Write text only to the log file without echoing to terminal."""
         with self.lock:

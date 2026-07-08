@@ -26,7 +26,7 @@ import logging
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from modules.pause_utils import parse_pause_tags, insert_pauses_into_audio_tensor, create_silence_tensor
-from config.config import ENABLE_FP16_PRECISION
+from config.config import ENABLE_FP16_PRECISION, ENABLE_TORCH_COMPILE
 logger = logging.getLogger(__name__)
 
 REPO_ID = "ResembleAI/chatterbox-turbo"
@@ -185,6 +185,10 @@ class ChatterboxTurboTTS:
         """
         ckpt_dir = Path(ckpt_dir)
 
+        # TF32 tensor cores for FP32 matmuls (S3Gen stays FP32 for vocoder stability).
+        # Near-FP32 accuracy, ~2x matmul throughput on Ampere+ GPUs; no-op on CPU/MPS.
+        torch.set_float32_matmul_precision("high")
+
         # Always load to CPU first for non-CUDA devices to handle CUDA-saved models
         if device in ["cpu", "mps"]:
             map_location = torch.device('cpu')
@@ -221,6 +225,13 @@ class ChatterboxTurboTTS:
         t3.to(device, dtype=dtype).eval()
         if ENABLE_FP16_PRECISION:
             logger.info("🔧 FP16 precision enabled - T3 model loaded in half precision")
+
+        # Compile the GPT2 backbone that inference_turbo actually calls each token step.
+        # dynamic=True because the KV cache grows every step; default mode (no cudagraphs)
+        # since cudagraph capture would re-record on every new sequence length.
+        if ENABLE_TORCH_COMPILE and device not in ["cpu", "mps"]:
+            t3.tfmr = torch.compile(t3.tfmr, dynamic=True)
+            logger.info("🔧 torch.compile enabled on T3 transformer backbone")
 
         s3gen = S3Gen(meanflow=True)
         weights = load_file(ckpt_dir / "s3gen_meanflow.safetensors")

@@ -44,6 +44,8 @@ GPT2_MEDIUM_CONFIG = {
   "initializer_range": 0.02,
   "layer_norm_epsilon": 1e-05,
   "model_type": "gpt2",
+  # Fused scaled-dot-product attention kernels; HF GPT2 defaults to slow "eager" path without this
+#  "attn_implementation": "sdpa",
   "n_ctx": 8196,
   "n_embd": 1024,
   "hidden_size": 1024,

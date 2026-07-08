@@ -1,10 +1,11 @@
 # DNXS Spokenword ChatterboxTTS Turbo
 
+![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/DNXSSW.png)
+
 **Open-source audiobook production system built on Resemble AI's Chatterbox Turbo.**
 
 Turn raw text into professional M4B audiobooks with voice cloning, ASR validation,
 intelligent chunking, and quality control — all running locally on your GPU.
-<img src="config/DNXSSW.png" alt="LOGO" width="800">
 
 ---
 
@@ -20,15 +21,9 @@ that dynamically adjusts TTS parameters per chunk, optional ASR validation using
 faster-whisper, and intelligent resume from interruptions. Both a PyQt5 GUI and a
 full-featured CLI are provided.
 
-# <mark>**In Progreess changes:</mark>**
-
-Currently in testing: 
-
-Multi voice.  Right now I'm using a separate program to generate an input JSON file with multiple voices.  The program parses the input text, automatically generates a character list, assigns text to each character, then the user can go through and review and edit.  The final output is a JSON file that will generate an unlimited number of characters with an unlimited number of voices.  Got 30 characters in your book you can have 30 voices and make a full cast audio book.  
-
 ## Features
 
-<img src="config/maingui.png" alt="Main Menu" width="800">
+![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/maingui.png)
 
 - **TTS Engines** — S3Gen and T3 (Chatterbox Turbo) with FP16/TF32 mixed precision
 
@@ -48,9 +43,9 @@ Multi voice.  Right now I'm using a separate program to generate an input JSON f
 
 - **torch.compile Optimization** — optional model compilation for faster inference
 
-<img src="config/configmenu.png" alt="Config Menu" width="800">
+![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/configmenu.png)
 
-<img src="config/repairgui.png" alt="Repair Menu" width="800">
+![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/repairgui.png)
 
 ## Requirements
 
@@ -72,6 +67,8 @@ chmod +x install.sh
 ```
 
 ****IMPORTANT:  after running install. There will be a .env File created.  You must edit this file and add your Hugging Face token.  On first run of the program, the chatterbox model will be downloaded from Huggingface. It will fail without this token.
+
+
 
 ### Manual
 

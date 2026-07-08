@@ -170,7 +170,7 @@ DEFAULT_TEMPERATURE = 0.85
 DEFAULT_SEED = 0 # Random seed for generation. 0 means random.
 
 # Advanced Sampling Parameters (Min_P Sampler Support)
-DEFAULT_MIN_P = 0.05                   # Min probability threshold (0.0 disables)
+DEFAULT_MIN_P = 0.00                   # Min probability threshold (0.0 disables)
 DEFAULT_TOP_P = 1.0                    # Top-p sampling (1.0 disables)
 DEFAULT_REPETITION_PENALTY = 1.2      # Repetition penalty (1.0 = no penalty)
 
@@ -347,7 +347,7 @@ REGEN_CFG_ADJUSTMENT = 0.1           # How much to adjust cfg_weight per retry (
 # TORCH.COMPILE OPTIMIZATION SETTINGS
 # ============================================================================
 
-ENABLE_TORCH_COMPILE = True                # Master enable/disable for torch.compile
+ENABLE_TORCH_COMPILE = False                # Master enable/disable for torch.compile
 
 # Component-specific compilation flags
 COMPILE_VOICE_ENCODER = False               # Compile voice encoder

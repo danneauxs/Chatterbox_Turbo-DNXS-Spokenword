@@ -34,6 +34,41 @@ def load_metadata(path):
     
     return None
 
+def load_voice_sections(path):
+    """Parse a multi-voice JSON into a list of (metadata, chunks) tuples.
+
+    Each _metadata block in the flat list starts a new voice section. All
+    items following it (until the next _metadata block) belong to that section.
+    Single-voice JSONs with one metadata block return a list of one tuple.
+
+    Args:
+        path (str): Path to the JSON file.
+
+    Returns:
+        list[tuple[dict, list]]: [(metadata_dict, [chunk_dicts]), ...]
+    """
+    with open(path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    sections = []
+    current_meta = None
+    current_chunks = []
+
+    for item in data:
+        if isinstance(item, dict) and item.get('_metadata'):
+            if current_meta is not None:
+                sections.append((current_meta, current_chunks))
+            current_meta = item
+            current_chunks = []
+        else:
+            current_chunks.append(item)
+
+    if current_meta is not None:
+        sections.append((current_meta, current_chunks))
+
+    return sections
+
+
 def save_chunks(path, chunks):
     """Saves chunks of data to a specified path after cleaning.
     Args:

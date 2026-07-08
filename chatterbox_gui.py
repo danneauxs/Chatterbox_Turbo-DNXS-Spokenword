@@ -573,7 +573,7 @@ class ChatterboxMainWindow(QMainWindow):
         self.tab_widget.setTabVisible(4, False)  # 5. Prepare Text - HIDE
         self.tab_widget.setTabVisible(5, False)  # 6. Test Chunking - HIDE
         self.tab_widget.setTabVisible(6, True)   # 7. Repair Tool - SHOW
-        self.tab_widget.setTabVisible(7, False)  # 8. Generate from JSON - HIDE
+        self.tab_widget.setTabVisible(7, True)   # 8. Generate from JSON
         self.tab_widget.setTabVisible(8, False)  # 9. Voice Analyzer - HIDE
         self.tab_widget.setTabVisible(9, False)  # 10. Audio Output Analyzer - HIDE
 
@@ -693,6 +693,11 @@ class ChatterboxMainWindow(QMainWindow):
 
         # Horizontal layout for VADER and ASR checkboxes
         checkbox_layout = QHBoxLayout()
+
+        self.vader_checkbox = QCheckBox("🎭 Enable VADER sentiment")
+        self.vader_checkbox.setChecked(False)
+        self.vader_checkbox.setToolTip("Dynamically adjusts temperature and repetition_penalty per chunk based on emotional content")
+        checkbox_layout.addWidget(self.vader_checkbox)
 
         self.asr_checkbox = QCheckBox("🎤 Enable ASR validation")
         self.asr_checkbox.setChecked(False)
@@ -2013,6 +2018,27 @@ class ChatterboxMainWindow(QMainWindow):
         search_btn.clicked.connect(self.search_chunks_for_repair)
         search_layout.addWidget(search_btn)
 
+        # Load ASR failures button
+        asr_btn = QPushButton("📋 Load ASR Failures")
+        asr_btn.clicked.connect(self.load_asr_failures_for_repair)
+        asr_btn.setToolTip("Load all chunks from asr_remaining_failures.json")
+        search_layout.addWidget(asr_btn)
+
+        # Chunk number search row
+        chunk_num_layout = QHBoxLayout()
+        chunk_num_layout.addWidget(QLabel("Jump to Chunk #:"))
+        self.repair_chunk_num_edit = QLineEdit()
+        self.repair_chunk_num_edit.setPlaceholderText("Enter chunk number (1-based)...")
+        self.repair_chunk_num_edit.setMaximumWidth(200)
+        self.repair_chunk_num_edit.returnPressed.connect(self.search_chunk_by_number)
+        chunk_num_layout.addWidget(self.repair_chunk_num_edit)
+        go_btn = QPushButton("Go")
+        go_btn.clicked.connect(self.search_chunk_by_number)
+        go_btn.setMaximumWidth(60)
+        chunk_num_layout.addWidget(go_btn)
+        chunk_num_layout.addStretch()
+        search_layout.addLayout(chunk_num_layout)
+
         # Results list
         search_layout.addWidget(QLabel("Search Results:"))
         self.repair_results_list = QListWidget()
@@ -2194,22 +2220,6 @@ class ChatterboxMainWindow(QMainWindow):
 
         layout.addWidget(json_group)
 
-        # Voice selection
-        voice_group = QGroupBox("🎤 Voice Selection")
-        voice_group.setStyleSheet("QGroupBox { border: 1px solid gray; border-radius: 3px; margin: 5px; padding-top: 10px; }")
-        voice_layout = QFormLayout(voice_group)
-
-        voice_layout.addRow(QLabel("Select voice for audiobook generation:"))
-        self.json_voice_combo = QComboBox()
-        voice_layout.addRow("Voice:", self.json_voice_combo)
-
-        refresh_json_voices_btn = QPushButton("🔄 Refresh Voice List")
-        refresh_json_voices_btn.clicked.connect(self.refresh_json_voices)
-        voice_layout.addRow(refresh_json_voices_btn)
-
-        layout.addWidget(voice_group)
-
-
         # Generation controls
         generate_group = QGroupBox("🎵 Audio Generation")
         generate_layout = QVBoxLayout(generate_group)
@@ -2219,6 +2229,12 @@ class ChatterboxMainWindow(QMainWindow):
         self.json_generate_btn.setStyleSheet("QPushButton { background-color: #E91E63; color: white; font-weight: bold; padding: 12px; }")
         self.json_generate_btn.clicked.connect(self.generate_from_json)
         generate_layout.addWidget(self.json_generate_btn)
+
+        self.json_multivoice_btn = QPushButton("🎭 Generate Multi-Voice from JSON")
+        self.json_multivoice_btn.setStyleSheet("QPushButton { background-color: #6A1B9A; color: white; font-weight: bold; padding: 12px; }")
+        self.json_multivoice_btn.setToolTip("Process a multi-voice JSON file — voices and params come from the JSON metadata blocks")
+        self.json_multivoice_btn.clicked.connect(self.generate_multivoice_gui)
+        generate_layout.addWidget(self.json_multivoice_btn)
 
         # Progress bar
         self.json_progress = QProgressBar()
@@ -2287,9 +2303,6 @@ class ChatterboxMainWindow(QMainWindow):
         self.json_audio_position = 0
         self.json_audio_duration = 0
         self.json_slider_dragging = False
-
-        # Populate voices on tab creation
-        self.refresh_json_voices()
 
         # Add structured status panel for Tab 8
         self.tab8_status_panel = StructuredStatusPanel("🎵 JSON Generation Status")
@@ -2637,7 +2650,7 @@ class ChatterboxMainWindow(QMainWindow):
         book_path = Path(self.book_path_edit.text())
         voice_path = Path(self.voice_path_edit.text()) if self.voice_path_edit.text() else None
         text_file_path = Path(self.text_file_combo.currentData())
-        use_vader = False  # VADER disabled (widget removed)
+        use_vader = self.vader_checkbox.isChecked()
         enable_asr = self.asr_checkbox.isChecked()
 
         # Build ASR configuration
@@ -3153,7 +3166,7 @@ class ChatterboxMainWindow(QMainWindow):
         print(f"📂 Output directory: {book_output_dir}")
 
         # Get TTS parameters from Main Tab (same as used in convert_audiobook)
-        use_vader = False  # VADER disabled (widget removed)
+        use_vader = self.vader_checkbox.isChecked()
         user_tts_params = {
             'exaggeration': DEFAULT_EXAGGERATION,  # Default (widget removed)
             'cfg_weight': DEFAULT_CFG_WEIGHT,  # Default (widget removed)
@@ -3420,6 +3433,87 @@ class ChatterboxMainWindow(QMainWindow):
             self.current_repair_chunk = chunk
             self.update_repair_chunk_display()
             self.log_output(f"Selected chunk {chunk['index']} for editing")
+
+    def load_asr_failures_for_repair(self):
+        """Load all chunks from asr_remaining_failures.json into search results"""
+        import json
+        from pathlib import Path
+        from config.config import AUDIOBOOK_ROOT
+
+        # Get current book selection
+        current_data = self.repair_book_combo.currentData()
+        if not current_data or not self.current_repair_chunks:
+            QMessageBox.warning(self, "No Book", "Select a book first")
+            return
+        book_name, json_path, source = current_data
+
+        # Find failures file in book's TTS/ subdirectory
+        tts_dir = Path(AUDIOBOOK_ROOT) / book_name / "TTS"
+        failures_file = tts_dir / "asr_remaining_failures.json"
+
+        if not failures_file.exists():
+            QMessageBox.information(self, "No Failures File",
+                f"No ASR failures file found at:\n{failures_file}\n\n"
+                "Run ASR validation first to generate this file.")
+            return
+
+        try:
+            with open(failures_file, 'r', encoding='utf-8') as f:
+                failures = json.load(f)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to read failures file:\n{e}")
+            return
+
+        self.repair_results_list.clear()
+        found = 0
+        for entry in failures:
+            chunk_id = entry.get('chunk_id', '')
+            try:
+                chunk_number = int(chunk_id.split('_')[1])  # "chunk_04093" → 4093
+                chunks_index = chunk_number - 1              # 4093 → 4092 (0-based)
+                if 0 <= chunks_index < len(self.current_repair_chunks):
+                    chunk = self.current_repair_chunks[chunks_index]
+                    score = entry.get('score', 0)
+                    text_preview = chunk['text'][:60] + "..."
+                    item_text = f"[{chunk_number}] ASR:{score:.2f} {text_preview}"
+                    item = QListWidgetItem(item_text)
+                    item.setData(Qt.UserRole, chunk)
+                    self.repair_results_list.addItem(item)
+                    found += 1
+            except (ValueError, IndexError):
+                pass
+
+        self.log_output(f"📋 Loaded {found} ASR failures from {failures_file.name}")
+        if found == 0:
+            self.log_output("⚠️ No matching chunks found (book may not be fully loaded)")
+
+    def search_chunk_by_number(self):
+        """Jump to a specific chunk by its 1-based display number"""
+        text = self.repair_chunk_num_edit.text().strip()
+        if not text.isdigit():
+            self.log_output("❌ Please enter a valid chunk number")
+            return
+        chunk_number = int(text)           # user enters 1-based display number
+        chunks_index = chunk_number - 1    # convert to 0-based
+
+        if not self.current_repair_chunks:
+            QMessageBox.warning(self, "No Book", "Select a book first")
+            return
+        if chunks_index < 0 or chunks_index >= len(self.current_repair_chunks):
+            self.log_output(f"❌ Chunk {chunk_number} out of range (1–{len(self.current_repair_chunks)})")
+            return
+
+        chunk = self.current_repair_chunks[chunks_index]
+        self.repair_results_list.clear()
+        text_preview = chunk['text'][:60] + "..."
+        item_text = f"[{chunk_number}] {text_preview}"
+        item = QListWidgetItem(item_text)
+        item.setData(Qt.UserRole, chunk)
+        self.repair_results_list.addItem(item)
+        # Auto-select the single result
+        self.repair_results_list.setCurrentRow(0)
+        self.select_chunk_for_repair(self.repair_results_list.item(0))
+        self.log_output(f"✅ Jumped to chunk {chunk_number}")
 
     def update_repair_chunk_display(self):
         """Update the chunk editor display with current chunk data"""
@@ -4457,22 +4551,6 @@ Audio: chunk_{chunk['index']+1:05d}.wav"""
                 chunk_info=status_data.get('chunk_info')
             )
 
-    # JSON Generate Tab Methods
-    def refresh_json_voices(self):
-        """Refresh the list of all available voices for JSON generation"""
-        try:
-            from modules.file_manager import list_voice_samples
-            voice_files = list_voice_samples()
-
-            self.json_voice_combo.clear()
-            for voice_file in voice_files:
-                voice_name = voice_file.stem
-                self.json_voice_combo.addItem(voice_name, str(voice_file))
-
-            self.log_output(f"Loaded {len(voice_files)} voices for JSON generation")
-
-        except Exception as e:
-            self.log_output(f"Error loading voices: {e}")
 
     def browse_json_file(self):
         """Browse for JSON chunks file"""
@@ -4501,7 +4579,13 @@ Audio: chunk_{chunk['index']+1:05d}.wav"""
             QMessageBox.warning(self, "File Not Found", f"JSON file not found: {json_path}")
             return
 
-        selected_voice = self.json_voice_combo.currentText() or None
+        # Read voice from JSON metadata — no combo override
+        try:
+            from wrapper.chunk_loader import load_metadata
+            meta = load_metadata(json_path)
+            selected_voice = meta.get("voice_used") if meta else None
+        except Exception:
+            selected_voice = None
 
         try:
             # Get speed/temp setting from config tab
@@ -4597,6 +4681,65 @@ Audio: chunk_{chunk['index']+1:05d}.wav"""
         else:
             self.log_output(f"❌ Audiobook generation failed: {message}")
             QMessageBox.critical(self, "Generation Failed", f"Audiobook generation failed:\n{message}")
+
+    def generate_multivoice_gui(self):
+        """Launch multi-voice generation from a JSON file whose metadata blocks carry voice and params."""
+        json_path = self.json_file_edit.text().strip()
+        if not json_path:
+            QMessageBox.warning(self, "No JSON File", "Please select a multi-voice JSON file first.")
+            return
+        if not os.path.exists(json_path):
+            QMessageBox.warning(self, "File Not Found", f"JSON file not found:\n{json_path}")
+            return
+
+        self.log_output(f"🎭 Starting multi-voice generation...")
+        self.log_output(f"📄 JSON: {os.path.basename(json_path)}")
+
+        self.json_multivoice_btn.setEnabled(False)
+        self.json_generate_btn.setEnabled(False)
+        self.json_progress.setVisible(True)
+        self.json_progress.setValue(0)
+
+        self.json_multivoice_thread = ProcessThread(self._run_multivoice_from_json, json_path)
+        self.json_multivoice_thread.output_signal.connect(self.log_output)
+        self.json_multivoice_thread.finished_signal.connect(self._multivoice_finished)
+        self.json_multivoice_thread.structured_status_signal.connect(self.update_tab1_status_panel)
+        self.json_multivoice_thread.start()
+
+    def _run_multivoice_from_json(self, json_path):
+        """Worker: calls generate_multivoice_from_json and stores result path."""
+        from modules.gui_json_generator import generate_multivoice_from_json
+        success, message, audiobook_path = generate_multivoice_from_json(json_path)
+        if success and audiobook_path:
+            self.json_audio_file = audiobook_path
+            print(f"✅ {message}")
+            print(f"📁 {audiobook_path}")
+        else:
+            print(f"❌ {message}")
+        return success
+
+    def _multivoice_finished(self, success, message):
+        """Handle multi-voice generation completion."""
+        self.json_multivoice_btn.setEnabled(True)
+        self.json_generate_btn.setEnabled(True)
+        self.json_progress.setVisible(False)
+
+        if success and hasattr(self, 'json_audio_file') and self.json_audio_file:
+            filename = os.path.basename(self.json_audio_file)
+            self.json_current_file.setText(f"📁 Generated: {filename}")
+            self.json_current_file.setStyleSheet(
+                "background-color: #d4edda; padding: 8px; border: 1px solid #c3e6cb; color: #155724; border-radius: 4px;"
+            )
+            self.json_play_btn.setEnabled(True)
+            self.json_stop_btn.setEnabled(True)
+            self.json_rewind_btn.setEnabled(True)
+            self.json_ff_btn.setEnabled(True)
+            self.json_position_slider.setEnabled(True)
+            self.log_output("✅ Multi-voice audiobook generation complete!")
+            QMessageBox.information(self, "Complete", f"Multi-voice audiobook created!\n\n{filename}")
+        else:
+            self.log_output(f"❌ Multi-voice generation failed: {message}")
+            QMessageBox.critical(self, "Failed", f"Multi-voice generation failed:\n{message}")
 
     # Audio Playback Control Methods
     def play_json_audio(self):

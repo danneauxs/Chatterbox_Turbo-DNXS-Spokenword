@@ -62,6 +62,58 @@ def regenerate_single_chunk(chunk_text: str, tts_params: dict, tts_model, voice_
         return None
 
 
+def validate_single_chunk_via_daemon(asr_client, chunk_id: str, attempt_num: int, audio_path: Path, expected_text: str, timeout: int = 60) -> Dict:
+    """
+    Validate a single regeneration attempt via the ASR daemon (preferred path).
+
+    Args:
+        asr_client: ASR client instance managing the daemon
+        chunk_id: Original chunk identifier (e.g., 'chunk_00026')
+        attempt_num: Attempt number (2, 3, or 4)
+        audio_path: Path to the attempt audio file
+        expected_text: Reference text for the chunk
+        timeout: Maximum seconds to wait for ASR daemon result
+
+    Returns:
+        dict: ASR validation result with 'passed', 'score', 'asr_text', 'expected_text' keys
+    """
+    try:
+        # Build unique ID so result files don't collide with phase-1 results
+        # Phase 1 wrote chunk_00026.result.json; we need a different name so get_result()
+        # waits for the daemon to actually score this attempt, not return stale phase-1 result
+        unique_id = f"{chunk_id}_regen{attempt_num}"
+
+        # Submit to daemon queue
+        asr_client.submit(unique_id, audio_path, expected_text)
+
+        # Wait for result (with timeout)
+        result = asr_client.get_result(unique_id, timeout=timeout)
+
+        if result is None:
+            # Timeout waiting for daemon
+            logging.warning(f"⏰ Timeout waiting for ASR daemon result for {unique_id}")
+            return {
+                'passed': False,
+                'score': 0.0,
+                'error': f'Timeout waiting for ASR daemon result (>{timeout}s)',
+                'asr_text': '',
+                'expected_text': expected_text
+            }
+
+        # Daemon returned a valid result
+        return result
+
+    except Exception as e:
+        logging.error(f"❌ ASR daemon validation exception for {chunk_id}_attempt{attempt_num}: {e}")
+        return {
+            'passed': False,
+            'score': 0.0,
+            'error': str(e),
+            'asr_text': '',
+            'expected_text': expected_text
+        }
+
+
 def validate_single_chunk_subprocess(audio_path: Path, text_path: Path, threshold: float) -> Dict:
     """
     Validate a single chunk using subprocess ASR validation.
@@ -89,66 +141,31 @@ def validate_single_chunk_subprocess(audio_path: Path, text_path: Path, threshol
             '--json'
         ], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
         
-        if result.returncode == 0:
+        # returncode 0 = passed, 2 = ran OK but chunk failed threshold, 1 = crash
+        if result.returncode in (0, 2):
             validation = json.loads(result.stdout)
-            logging.info(f"✅ ASR validation: {validation['score']:.3f}")
+            logging.info(f"{'✅' if validation['passed'] else '❌'} ASR validation: {validation['score']:.3f}")
             return validation
         else:
-            logging.error(f"❌ ASR validation failed: {result.stderr}")
+            # On crash (rc=1), the real error is in stdout (JSON with traceback),
+            # not stderr (which is just deprecation warnings). Try to parse it.
+            error_text = result.stderr
+            asr_text = ''
+            try:
+                error_json = json.loads(result.stdout)
+                if isinstance(error_json, dict) and 'error' in error_json:
+                    error_text = error_json.get('error', result.stderr)
+                    if 'traceback' in error_json:
+                        error_text = f"{error_text}\nTraceback: {error_json['traceback']}"
+                    asr_text = error_json.get('asr_text', '')
+            except (json.JSONDecodeError, ValueError):
+                pass
+            logging.error(f"❌ ASR subprocess error (rc={result.returncode}): {error_text}")
             return {
                 'passed': False,
                 'score': 0.0,
-                'error': result.stderr,
-                'asr_text': '',
-                'expected_text': expected_text
-            }
-            
-    except Exception as e:
-        logging.error(f"❌ ASR validation exception: {e}")
-        return {
-            'passed': False,
-            'score': 0.0,
-            'error': str(e),
-            'asr_text': '',
-            'expected_text': expected_text
-        }
-    """
-    Validate a single chunk using subprocess ASR validation.
-    
-    Args:
-        audio_path: Path to audio file
-        text_path: Path to reference text file
-        threshold: ASR similarity threshold
-        
-    Returns:
-        dict: ASR validation result
-    """
-    try:
-        # Read reference text
-        with open(text_path, 'r', encoding='utf-8') as f:
-            expected_text = f.read().strip()
-        
-        # Call ASR headless validator subprocess
-        result = subprocess.run([
-            str(_ASR_PYTHON),
-            str(_ASR_HEADLESS),
-            '--audio-file', str(audio_path),
-            '--text-file', str(text_path),
-            '--threshold', str(threshold),
-            '--json'
-        ], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
-        
-        if result.returncode == 0:
-            validation = json.loads(result.stdout)
-            logging.info(f"✅ ASR validation: {validation['score']:.3f}")
-            return validation
-        else:
-            logging.error(f"❌ ASR validation failed: {result.stderr}")
-            return {
-                'passed': False,
-                'score': 0.0,
-                'error': result.stderr,
-                'asr_text': '',
+                'error': error_text,
+                'asr_text': asr_text,
                 'expected_text': expected_text
             }
             
@@ -232,8 +249,11 @@ def regenerate_with_best_selection(
                 ta.save(str(attempt_path), audio.cpu(), 24000)  # 24kHz sample rate
                 print(f"      💾 Saved to {attempt_path.name}")
                 
-                # Validate attempt immediately
-                result = validate_single_chunk_subprocess(attempt_path, text_file, threshold)
+                # Validate attempt immediately — prefer daemon if available, fallback to subprocess
+                if asr_client:
+                    result = validate_single_chunk_via_daemon(asr_client, chunk_id, attempt_num, attempt_path, chunk_text, timeout=60)
+                else:
+                    result = validate_single_chunk_subprocess(attempt_path, text_file, threshold)
                 attempt_scores[attempt_num] = result['score']
                 attempt_files[attempt_num] = attempt_path
                 
