@@ -1,6 +1,6 @@
 # DNXS Spokenword ChatterboxTTS Turbo
 
-![](![](config/DNXSSW.png))
+![]((config/DNXSSW.png))
 
 **Open-source audiobook production system built on Resemble AI's Chatterbox Turbo.**
 
