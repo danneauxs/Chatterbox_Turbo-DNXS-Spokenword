@@ -24,7 +24,7 @@ full-featured CLI are provided.
 
 ## Features
 
-![](maingui.png)
+![](config/maingui.png)
 
 - **TTS Engines** — S3Gen and T3 (Chatterbox Turbo) with FP16/TF32 mixed precision
 
@@ -48,9 +48,9 @@ full-featured CLI are provided.
 
 - 
 
-![](configmenu.png)
+![](config/configmenu.png)
 
-![](repairgui.png)
+![](config/repairgui.png)
 
 ## Requirements
 
