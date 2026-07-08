@@ -24,7 +24,7 @@ full-featured CLI are provided.
 
 ## Features
 
-![](/media/danno/Team1/Chatterbox%20Turbo%20Github%20Repo/Chatterbox_Turbo-DNXS-Spokenword/config/maingui.png)
+![](maingui.png)
 
 - **TTS Engines** — S3Gen and T3 (Chatterbox Turbo) with FP16/TF32 mixed precision
 
@@ -48,9 +48,9 @@ full-featured CLI are provided.
 
 - 
 
-![](/media/danno/Team1/Chatterbox%20Turbo%20Github%20Repo/Chatterbox_Turbo-DNXS-Spokenword/config/configmenu.png)
+![](configmenu.png)
 
-![](/media/danno/Team1/Chatterbox%20Turbo%20Github%20Repo/Chatterbox_Turbo-DNXS-Spokenword/config/repairgui.png)
+![](repairgui.png)
 
 ## Requirements
 
