@@ -51,7 +51,8 @@ def regenerate_single_chunk(chunk_text: str, tts_params: dict, tts_model, voice_
         # Filter to only Turbo-supported parameters
         turbo_supported_params = {"temperature", "top_p", "repetition_penalty", "audio_prompt_path", "top_k"}
         filtered_params = {k: v for k, v in tts_params.items() if k in turbo_supported_params}
-        filtered_params.setdefault('top_k', 1000)  # Turbo default
+        from config.config import DEFAULT_TOP_K
+        filtered_params.setdefault('top_k', DEFAULT_TOP_K)
 
         # Generate audio with filtered parameters
         with torch.no_grad():

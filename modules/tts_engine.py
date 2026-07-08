@@ -781,9 +781,9 @@ def process_batch(
     shared_tts_params = batch[0].get("tts_params", tts_params)
     # ChatterboxTurbo only supports: temperature, top_p, repetition_penalty, top_k, audio_prompt_path
     # Note: exaggeration, cfg_weight, min_p are ignored by Turbo
-    turbo_supported_params = {"temperature", "top_p", "repetition_penalty", "audio_prompt_path"}
+    turbo_supported_params = {"temperature", "top_p", "top_k", "repetition_penalty", "audio_prompt_path"}
     tts_args = {k: v for k, v in shared_tts_params.items() if k in turbo_supported_params}
-    tts_args.setdefault('top_k', 1000)  # Turbo default
+    tts_args.setdefault('top_k', DEFAULT_TOP_K)
 
     # 2. Generate audio in a batch (heuristic: only if lengths are similar and group size >1)
     try_batch = True
@@ -1054,9 +1054,9 @@ def process_one_chunk(
         try:
             # Filter to only supported ChatterboxTurbo parameters
             # Note: exaggeration, cfg_weight, min_p are ignored by Turbo and will log warnings if passed
-            turbo_supported_params = {"temperature", "top_p", "repetition_penalty", "audio_prompt_path"}
+            turbo_supported_params = {"temperature", "top_p", "top_k", "repetition_penalty", "audio_prompt_path"}
             tts_args = {k: v for k, v in current_tts_params.items() if k in turbo_supported_params}
-            tts_args.setdefault('top_k', 1000)  # Turbo default
+            tts_args.setdefault('top_k', DEFAULT_TOP_K)
 
             chunk_start_time = time.time()
             try:
@@ -1323,6 +1323,7 @@ def generate_enriched_chunks(text_file, output_dir, user_tts_params=None, qualit
         base_temperature = user_tts_params.get('temperature', BASE_TEMPERATURE)
         base_min_p = user_tts_params.get('min_p', DEFAULT_MIN_P)
         base_top_p = user_tts_params.get('top_p', DEFAULT_TOP_P)
+        base_top_k = user_tts_params.get('top_k', DEFAULT_TOP_K)
         base_repetition_penalty = user_tts_params.get('repetition_penalty', DEFAULT_REPETITION_PENALTY)
         use_vader = user_tts_params.get('use_vader', True)  # Default to True for backward compatibility
 
@@ -1332,6 +1333,7 @@ def generate_enriched_chunks(text_file, output_dir, user_tts_params=None, qualit
         base_temperature = BASE_TEMPERATURE
         base_min_p = DEFAULT_MIN_P
         base_top_p = DEFAULT_TOP_P
+        base_top_k = DEFAULT_TOP_K
         base_repetition_penalty = DEFAULT_REPETITION_PENALTY
         use_vader = True  # Default behavior
 
@@ -1421,6 +1423,7 @@ def generate_enriched_chunks(text_file, output_dir, user_tts_params=None, qualit
                 "temperature": temperature,
                 "min_p": min_p,
                 "top_p": base_top_p,  # Top-P remains constant (not adjusted by VADER)
+                "top_k": base_top_k,  # Top-K remains constant (not adjusted by VADER)
                 "repetition_penalty": repetition_penalty
             }
         })
@@ -1440,6 +1443,7 @@ def generate_enriched_chunks(text_file, output_dir, user_tts_params=None, qualit
                 "tts_params": {
                     "temperature": base_temperature,
                     "top_p": base_top_p,
+                    "top_k": base_top_k,
                     "repetition_penalty": base_repetition_penalty
                 }
             }
@@ -2474,7 +2478,7 @@ def regenerate_single_chunk(chunk_text: str, tts_params: dict, tts_model, voice_
         # Filter to only Turbo-supported parameters
         turbo_supported_params = {"temperature", "top_p", "repetition_penalty", "audio_prompt_path", "top_k"}
         filtered_params = {k: v for k, v in tts_params.items() if k in turbo_supported_params}
-        filtered_params.setdefault('top_k', 1000)  # Turbo default
+        filtered_params.setdefault('top_k', DEFAULT_TOP_K)
 
         # Generate audio with filtered parameters
         audio = tts_model.generate(chunk_text, **filtered_params)

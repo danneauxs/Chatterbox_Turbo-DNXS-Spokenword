@@ -773,6 +773,15 @@ class ChatterboxMainWindow(QMainWindow):
         self.top_p_spin.setMaximumWidth(100)
         tts_params_layout.addRow("Top-P:", self.top_p_spin)
 
+        self.top_k_spin = NoScrollSpinBox()
+        self._attach_spin_reset(self.top_k_spin, 'DEFAULT_TOP_K')
+        self.top_k_spin.setRange(TTS_PARAM_MIN_TOP_K, TTS_PARAM_MAX_TOP_K)
+        self.top_k_spin.setSingleStep(10)
+        self.top_k_spin.setValue(DEFAULT_TOP_K)
+        self.top_k_spin.setMaximumWidth(100)
+        self.top_k_spin.setToolTip("Limit sampling to the K most likely speech tokens (0 disables)")
+        tts_params_layout.addRow("Top-K:", self.top_k_spin)
+
         # Repetition Penalty
         self.repetition_penalty_spin = NoScrollDoubleSpinBox()
         self._attach_spin_reset(self.repetition_penalty_spin, 'DEFAULT_REPETITION_PENALTY')
@@ -1187,6 +1196,7 @@ class ChatterboxMainWindow(QMainWindow):
                 (self.temperature_spin, 'DEFAULT_TEMPERATURE'),
                 (self.min_p_spin, 'DEFAULT_MIN_P'),
                 (self.top_p_spin, 'DEFAULT_TOP_P'),
+                (self.top_k_spin, 'DEFAULT_TOP_K'),
                 (self.repetition_penalty_spin, 'DEFAULT_REPETITION_PENALTY'),
                 (self.main_playback_speed_spin, 'ATEMPO_SPEED'),
             ]
@@ -1272,7 +1282,7 @@ class ChatterboxMainWindow(QMainWindow):
         words_layout.addRow("Max Words:", self.max_chunk_words_spin)
 
         # Chunking Quality Selection
-        quality_desc = QLabel("Low: Original sentence-based chunking\nHigh: New paragraph-based chunking")
+        quality_desc = QLabel("Low: Sentence-based chunking (uses Min/Max Words)\nHigh: Paragraph chunking (ignores Min/Max Words)")
         quality_desc.setStyleSheet("font-size: 10px; color: #666; margin: 5px;")
         quality_desc.setWordWrap(True)
         words_layout.addRow(quality_desc)
@@ -2667,6 +2677,7 @@ class ChatterboxMainWindow(QMainWindow):
             'temperature': self.temperature_spin.value(),
             'min_p': self.min_p_spin.value(),
             'top_p': self.top_p_spin.value(),
+            'top_k': self.top_k_spin.value(),
             'repetition_penalty': self.repetition_penalty_spin.value(),
             'use_vader': use_vader,
             'enable_asr': asr_config.get('enabled', False),
@@ -3173,6 +3184,7 @@ class ChatterboxMainWindow(QMainWindow):
             'temperature': self.temperature_spin.value(),
             'min_p': self.min_p_spin.value(),
             'top_p': self.top_p_spin.value(),
+            'top_k': self.top_k_spin.value(),
             'repetition_penalty': self.repetition_penalty_spin.value(),
             'use_vader': use_vader
         }
@@ -3583,7 +3595,7 @@ Audio: chunk_{chunk['index']+1:05d}.wav"""
                         updated_chunk[field] = self.repair_boundary_combo.currentText()
                     elif field == 'tts_params':
                         # Standard TTS params order
-                        tts_order = ['exaggeration', 'cfg_weight', 'temperature', 'min_p', 'top_p', 'repetition_penalty']
+                        tts_order = ['exaggeration', 'cfg_weight', 'temperature', 'min_p', 'top_p', 'top_k', 'repetition_penalty']
                         updated_tts_params = OrderedDict()
                         original_tts = chunk.get('tts_params', {})
 
@@ -4082,10 +4094,8 @@ Audio: chunk_{chunk['index']+1:05d}.wav"""
         try:
             importlib.reload(config_mod)
 
-            # Performance settings
-            self.workers_spin.setValue(getattr(config_mod, 'MAX_WORKERS', self.workers_spin.value()))
+            # Performance settings (MAX_WORKERS / TTS_BATCH_SIZE spinners were removed from the GUI)
             self.batch_size_spin.setValue(getattr(config_mod, 'BATCH_SIZE', self.batch_size_spin.value()))
-            self.tts_batch_size_spin.setValue(getattr(config_mod, 'TTS_BATCH_SIZE', self.tts_batch_size_spin.value()))
             self.min_chunk_words_spin.setValue(getattr(config_mod, 'MIN_CHUNK_WORDS', self.min_chunk_words_spin.value()))
             self.max_chunk_words_spin.setValue(getattr(config_mod, 'MAX_CHUNK_WORDS', self.max_chunk_words_spin.value()))
 
@@ -4238,10 +4248,10 @@ Audio: chunk_{chunk['index']+1:05d}.wav"""
                 f.write(config_content)
 
             # Update specific values from GUI
+            # MAX_WORKERS / TTS_BATCH_SIZE spinners were removed from the GUI;
+            # those keys keep their existing values in config.py.
             gui_values = {
-                'MAX_WORKERS': self.workers_spin.value(),
                 'BATCH_SIZE': self.batch_size_spin.value(),
-                'TTS_BATCH_SIZE': self.tts_batch_size_spin.value(),
                 'MIN_CHUNK_WORDS': self.min_chunk_words_spin.value(),
                 'MAX_CHUNK_WORDS': self.max_chunk_words_spin.value(),
                 'CHUNKING_QUALITY': self.chunking_quality_combo.currentText(),

@@ -43,6 +43,10 @@ full-featured CLI are provided.
 
 - **torch.compile Optimization** — optional model compilation for faster inference
 
+- ****increased speed- **** On Nvidia 4060Ti avgs 5-6X (250it/s)
+
+- 
+
 ![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/configmenu.png)
 
 ![](/home/danno/MyApps/Turbotest/chatterbox-turbo-dist/config/repairgui.png)
@@ -67,8 +71,6 @@ chmod +x install.sh
 ```
 
 ****IMPORTANT:  after running install. There will be a .env File created.  You must edit this file and add your Hugging Face token.  On first run of the program, the chatterbox model will be downloaded from Huggingface. It will fail without this token.
-
-
 
 ### Manual
 

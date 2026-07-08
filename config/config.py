@@ -172,6 +172,7 @@ DEFAULT_SEED = 0 # Random seed for generation. 0 means random.
 # Advanced Sampling Parameters (Min_P Sampler Support)
 DEFAULT_MIN_P = 0.00                   # Min probability threshold (0.0 disables)
 DEFAULT_TOP_P = 1.0                    # Top-p sampling (1.0 disables)
+DEFAULT_TOP_K = 1000                   # Top-k sampling cap on speech tokens (0 disables)
 DEFAULT_REPETITION_PENALTY = 1.2      # Repetition penalty (1.0 = no penalty)
 
 # ============================================================================
@@ -210,6 +211,8 @@ TTS_PARAM_MIN_MIN_P = 0.02             # Increased from 0.0 to prevent sampling 
 TTS_PARAM_MAX_MIN_P = 0.3              # Reduced from MAX 0.5 to prevent over-restriction
 TTS_PARAM_MIN_TOP_P = 0.5              # Too low causes repetition
 TTS_PARAM_MAX_TOP_P = 1.0              # MAX 1.0 disables top_p
+TTS_PARAM_MIN_TOP_K = 0                # 0 disables top_k filtering entirely
+TTS_PARAM_MAX_TOP_K = 1000             # Speech vocab is ~6.5k; 1000 is already a loose cap
 TTS_PARAM_MIN_REPETITION_PENALTY = 1.0 # 1.0 = no penalty
 TTS_PARAM_MAX_REPETITION_PENALTY = 2.0 # Higher values too restrictive MAX 2
 
