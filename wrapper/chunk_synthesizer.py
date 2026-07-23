@@ -153,7 +153,7 @@ def synthesize_chunk(chunk, index, book_name, audio_dir, revision=False, chunks_
             detection_method = "fallback_first_available"
         
         print(f"🎤 Using voice: {voice_name} (method: {detection_method})")
-        compatible_voice = ensure_voice_sample_compatibility(voice_path)
+        compatible_voice = ensure_voice_sample_compatibility(voice_path, output_dir=Path(audio_dir).parent)
         
         # Get TTS parameters for this chunk
         tts_params = get_tts_params_for_chunk(chunk)

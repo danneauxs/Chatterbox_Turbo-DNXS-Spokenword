@@ -1,0 +1,154 @@
+
+Current throughput is ~3-4x real-time (1 min compute → 3-4 min audio). Goal is 8-10x.
+The `config/config.py` file has dozens of speed-related toggles (`ENABLE_TORCH_COMPILE`,
+`ENABLE_FP16_PRECISION`, `ENABLE_TF32_MATMUL`, `ENABLE_BATCH_BINNING`, etc.) but an audit
+of the actual code shows most are either dead (never read, or read under the wrong name),
+duplicated, or contradicted by hardcoded behavior elsewhere. The real speed levers are a
+short, different list from what the config file implies. This plan documents what's
+actually true today, what's fake, and what to change to close the gap to 8-10x.
+
+**Confirmed by code + a `resemble-ai/chatterbox` maintainer/community issue
+([#193](https://github.com/resemble-ai/chatterbox/issues/193)) and web research on
+CosyVoice2 (S3Gen's origin) and Chatterbox-Turbo's own release notes.**
+
+### What's already working (don't touch / don't re-implement)
+- **S3Gen diffusion steps already cut from 10 → 2** via `meanflow=True` +
+  `n_cfm_timesteps=2` hardcoded at `src/chatterbox/tts_turbo.py:236,560`. This is the
+  single biggest lever discussed in community threads (going 10→2-3 steps cuts mel
+  generation ~8-10x on its own) — **already applied**. No further gain available here
+  without quality loss.
+- T3 KV-cache is used correctly (`past_key_values` passed each decode step,
+  `t3.py:497-536`), and the generated-id tensor grows via `torch.cat` once per step
+  (already noted in-code as O(n) not O(n²)).
+- FP16 for T3, FP32 for VoiceEncoder/S3Gen (stability), TF32 matmul — all genuinely
+  wired in `tts_turbo.py:190,205,224-227,244,260`.
+- `torch.compile` on `t3.tfmr` is genuinely active when `ENABLE_TORCH_COMPILE=True`
+  (`tts_turbo.py:232-234`).
+
+### What's fake / dead (config theater — do not expect these to do anything as-is)
+- `ENABLE_TF32_MATMUL` (config.py:414) — never read; TF32 is actually controlled by an
+  unconditional call at `tts_turbo.py:190`, independent of this flag.
+- `ENABLE_MIXED_PRECISION` (config.py:415) — never read by that name; autocast is
+  applied unconditionally in `modules/real_tts_optimizer.py:134,153` regardless.
+- `modules/tts_engine.py:588` reads `ENABLE_TF32` (no `_MATMUL` suffix) inside a
+  try/except; the name doesn't existalways fires and
+  silently hardcodes `True`.
+- All per-component `COMPILE_VOICE_ER` / `COMPILE_VOCODER` /
+  `COMPILE_TEXT_PROCESSOR` flags (config.py:353-356) — zero consumers anywhere.
+- `ENABLE_BATCH_BINNING` / micro-bat groups chunks by
+  `(exaggeration, cfg_weight, temperature)` — but Turbo ignores exaggeration/cfg_weight
+  entirely (`tts_turbo.py:415-416`),meaningless.
+- `TURBO_CKPT_DIR`, `ENABLE_T3_ONNX`, `GENTTS_ENABLE_T3_TRT` — referenced in code/docstrings
+  but no corresponding config variabare aspirational dead ends.
+- `tools/run_tts_once.py` and `tools/tts_trt_benchmark.py` are currently broken
+  (import a nonexistent `get_autocasy`) — not usable for
+  benchmarking as-is.
+- `MAX_WORKERS`/`USE_DYNAMIC_WORKERSed behind
+  `_GPU_INFER_LOCK` (`modules/tts_engine.py:32,521,1065,1074`) regardless of worker
+  count, so extra workers only overl/O), never real GPU
+  concurrency.
+- Two independent, differently-confites exist
+  (`tts_turbo.py:232-234` compiling `t3.tfmr` directly, and
+  `modules/real_tts_optimizer.py:157odel.t3.forward` /
+  `model.s3gen.forward` with `mode='reduce-overhead'`) — redundant and possibly
+  conflicting; only one should remai
+
+### The real remaining levers (this come from)
+1. **Attention implementation on the T3 GPT2 backbone is "eager", not SDPA.**
+   `src/chatterbox/models/t3/llama_cplementation: "sdpa"`
+   *commented out*. `t3.py:69-73` builds `GPT2Config(**config_dict)` without ever
+   setting `attn_implementation`, sor path. Installed
+   `transformers==4.46.3` supports `attn_implementation="sdpa"` for GPT2. This is a
+   free, low-risk win — flip it on.
+2. **No true batching anywhere in the pipeline.** `tts_turbo.py:generate()` /
+   `_generate_single()` always run win, one chunk out,
+   sequentially, for both T3 (`t3.inference_turbo`) and S3Gen (`s3gen.inference`).
+   `TTS_BATCH_SIZE` / micro-batchingnly group chunks for
+   *scheduling*, not for a single stacked GPU forward pass. Audiobook workloads are
+   exactly the case batching helps mchunks — config caps
+   at `MAX_CHUNK_WORDS=28`). On an 8GB RTX 4060 Ti, batching 4-8 short chunks per T3
+   forward pass and per S3Gen forwarkely the largest
+   remaining lever, since it removes redundant per-chunk Python/kernel-launch overhead
+   and increases GPU utilization bet
+3. **KV-cache is the legacy tuple format, not `StaticCache`.** `t3.inference_turbo`
+   (`t3.py:463-546`) is a hand-rollehe default
+   tuple-of-tuples cache. Because sequence length grows every step, the existing
+   `torch.compile` calls are forced licitly avoid CUDA
+   graphs (comment in `tts_turbo.py` explains why). HuggingFace's documented pattern
+   (`cache_implementation="static"` -overhead")`) gets
+   fixed-shape decode steps and enables full CUDA graph capture, typically a large
+   speedup for autoregressive decodihe manual loop to use
+   `transformers.StaticCache` with a pre-allocated max length instead of the legacy
+   cache, and removing the per-step ` early-stop check)
+   from the compiled region.
+4. **Duplicate/competing `torch.compated** into one,
+   correctly configured for whichever caching strategy is chosen (dynamic shapes today,
+   or static + reduce-overhead if #3
+
+## Implementation Plan
+
+1. **Enable SDPA attention** (low ri
+   - `src/chatterbox/models/t3/llama_configs.py`: uncomment
+     `"attn_implementation": "sdpa"`
+   - Verify `t3.py:69-73` passes this through into `GPT2Config(**config_dict)` (it
+     should, since it unpacks the wh
+   - Benchmark before/after using a fixed manually-timed script (existing
+     `tools/bench_tts.py` after fixismall new script using
+     `time.perf_counter()` + `torch.cuda.synchronize()` around `_generate_single`).
+
+2. **Fix the config lies** (low risk, mechanical, unblocks trustworthy tuning later)
+   - `modules/tts_engine.py:588`: fiTF32_MATMUL` (the name
+     that actually exists in config.py), or remove the flag and keep the hardcoded
+     `True` if TF32 should always be
+   - Wire `ENABLE_MIXED_PRECISION` to actually gate the autocast calls in
+     `modules/real_tts_optimizer.py:if autocast should
+     always be on.
+   - Delete or clearly mark as unuseflags,
+     `TURBO_CKPT_DIR`, `ENABLE_T3_ONNX`, `GENTTS_ENABLE_T3_TRT`, and the duplicated
+     config blocks (`ENABLE_CHUNK_SI` and
+     `TORCH_COMPILE_CACHE_DIR`/`ENABLE_COMPILATION_WARMUP` each defined twice;
+     `ASR_WORKERS` etc. defined twiced twice).
+   - Fix `tools/run_tts_once.py`'s broken `get_autocast` import so benchmarking tools
+     work, or remove the dead TRT bert_benchmark.py`) if
+     TensorRT isn't going to be pursued.
+
+3. **Consolidate torch.compile to one call site**
+   - Keep the `tts_turbo.py:232-234`c=True) as the single
+     source of truth; remove the redundant compile in
+     `modules/real_tts_optimizer.py:ilation/conflicts.
+
+4. **Batch multiple chunks per GPU fed payoff, most invasive)
+   - Modify `tts_turbo.py:generate()`/`_generate_single()` to accept a list of text
+     chunks and produce a batch dimence_turbo` and
+     `s3gen.inference`, instead of the current one-chunk-in/one-chunk-out loop.
+   - Update `t3.inference_turbo` (`th>1: padding/masking
+     for chunks of different lengths, and per-sequence early-stop tracking (stop only
+     rows that hit `stop_speech_tokeorch.all`).
+   - Update the caller in `modules/tts_engine.py` (currently loops `model.generate()`
+     per chunk under `_GPU_INFER_LOCed by `TTS_BATCH_SIZE`
+     or a new VRAM-aware batch size, given 8GB VRAM) and submit them as one batched call.
+   - Start conservative (batch=2-4) sizes are short
+     (≤28 words) so VRAM headroom should allow modest batches even on 8GB.
+
+5. **(Stretch, higher effort/risk) StaticCache + CUDA graphs for T3 decode**
+   - Only pursue after 1-4 are done nce_turbo`'s manual
+     loop to use `transformers.StaticCache` with a fixed `max_gen_len` buffer, move the
+     stop-check out of the hot loop d compile with
+     `mode="reduce-overhead"` for real CUDA graph capture. This is the path to
+     squeezing further gains but hasectness bugs
+     (padding/mask handling, cache eviction) — treat as a separate follow-up effort,
+     not bundled with the batching w
+
+## Verification
+
+- Use (fixed) `tools/bench_tts.py` oget a repeatable
+  tokens/sec (T3) and wall-clock (S3Gen) baseline *before* any change.
+- After each numbered step, re-run t test sentence(s) and
+  record RTF (audio_sec / processing_sec) — target is moving from ~3-4x to 8-10x.
+- Run a full chapter/chunk-list throever entry point
+  `modules/tts_engine.py` exposes for a full run) and manually listen to confirm no
+  quality regression (SDPA and batchivalent-ish but
+  worth a spot check; batching in particular can introduce padding artifacts if the
+  attention mask isn't handled corre
+- Confirm `performance.log` (written at `modules/tts_engine.py:1080-1082`) shows lower
+  `processing_time_seconds` per chunnges.

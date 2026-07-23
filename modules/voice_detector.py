@@ -7,49 +7,62 @@ import re
 import json
 from pathlib import Path
 from config.config import AUDIOBOOK_ROOT
-from modules.file_manager import list_voice_samples
+from modules.file_manager import ensure_voice_sample_compatibility, list_voice_samples
 
 
 def get_likely_voices_for_book(book_name, chunks_json_path=None):
     """
-    Get the most likely voice candidates for a book using the 3 detection methods:
-    1. JSON metadata/comments (if available)
-    2. run.log file 
-    3. Generated audiobook filenames (may return multiple)
+    Get repair voice candidates from a book's TTS copies and Voice_Samples.
+
+    JSON metadata identifies and prioritizes the voice used for saved chunks.
+    Generated audiobook filenames are excluded because old runs can use unrelated
+    voices.
     
     Returns: list of (voice_name, voice_path, detection_method) tuples
     """
     print(f"🔍 Finding likely voices for book: {book_name}")
     likely_voices = []
     
-    # Method 1: Check JSON metadata and comments
+    # JSON declares the voice for current chunks; match its normalized name exactly.
     if chunks_json_path:
         voice_from_json = get_voice_from_json(chunks_json_path)
         if voice_from_json:
-            voice_path = find_voice_file_by_name(voice_from_json) or find_voice_in_tts_dir(voice_from_json, book_name)
+            voice_path = next(
+                (
+                    candidate_path
+                    for candidate_name, candidate_path in get_voices_from_tts_dir(book_name)
+                    if candidate_name.casefold() == voice_from_json.casefold()
+                ),
+                None,
+            )
+            if not voice_path:
+                source_path = next(
+                    (
+                        candidate_path
+                        for candidate_path in list_voice_samples()
+                        if candidate_path.stem.removesuffix("_ttsready").casefold() == voice_from_json.casefold()
+                    ),
+                    None,
+                )
+                if source_path:
+                    tts_dir = Path(AUDIOBOOK_ROOT) / book_name / "TTS"
+                    voice_path = Path(ensure_voice_sample_compatibility(source_path, tts_dir))
             if voice_path:
                 likely_voices.append((voice_from_json, voice_path, "json_metadata"))
                 print(f"✅ Voice found in JSON: {voice_from_json}")
 
-    # Method 2: Check run.log file
-    voice_from_log = get_voice_from_log(book_name)
-    if voice_from_log:
-        voice_path = find_voice_file_by_name(voice_from_log) or find_voice_in_tts_dir(voice_from_log, book_name)
-        if voice_path:
-            # Avoid duplicates
-            if not any(v[0] == voice_from_log for v in likely_voices):
-                likely_voices.append((voice_from_log, voice_path, "run_log"))
-                print(f"✅ Voice found in run.log: {voice_from_log}")
+    # TTS contains book-specific copies, including voices from prior runs.
+    for voice_name, voice_path in get_voices_from_tts_dir(book_name):
+        if not any(v[0].casefold() == voice_name.casefold() for v in likely_voices):
+            likely_voices.append((voice_name, voice_path, "tts_directory"))
+            print(f"✅ Voice found in TTS directory: {voice_name}")
 
-    # Method 3: Check generated filename patterns (may find multiple)
-    voices_from_files = get_voices_from_filenames(book_name)
-    for voice_name in voices_from_files:
-        voice_path = find_voice_file_by_name(voice_name) or find_voice_in_tts_dir(voice_name, book_name)
-        if voice_path:
-            # Avoid duplicates
-            if not any(v[0] == voice_name for v in likely_voices):
-                likely_voices.append((voice_name, voice_path, "filename_pattern"))
-                print(f"✅ Voice found in filename: {voice_name}")
+    # Voice_Samples provides optional alternatives outside this book's history.
+    for voice_path in list_voice_samples():
+        voice_name = voice_path.stem.removesuffix("_ttsready")
+        if not any(v[0].casefold() == voice_name.casefold() for v in likely_voices):
+            likely_voices.append((voice_name, voice_path, "voice_samples"))
+            print(f"✅ Voice found in Voice_Samples: {voice_name}")
     
     if not likely_voices:
         print(f"⚠️ No likely voices detected for {book_name}")
@@ -140,6 +153,17 @@ def get_voices_from_filenames(book_name):
                 found_voices.append(voice_name)
     
     return found_voices
+
+
+def get_voices_from_tts_dir(book_name):
+    """Return voice names and paths directly from book-specific TTS-ready WAVs."""
+    tts_dir = Path(AUDIOBOOK_ROOT) / book_name / "TTS"
+    if not tts_dir.exists():
+        return []
+    return [
+        (voice_file.stem.removesuffix("_ttsready"), voice_file)
+        for voice_file in sorted(tts_dir.glob("*.wav"), key=lambda path: path.stem.casefold())
+    ]
 
 def get_voice_from_filename(book_name):
     """Extract voice name from existing audiobook filename patterns (backwards compatibility)"""

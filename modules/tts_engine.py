@@ -1677,9 +1677,19 @@ def process_book_folder(book_dir, voice_path, tts_params, device, skip_cleanup=F
         for wav_file in audio_chunks_dir.glob("*.wav"):
             wav_file.unlink(missing_ok=True)
 
+        # Close logging handlers before deleting log files (fixes Windows PermissionError)
+        import logging
+        for handler in logging.root.handlers[:]:
+            if isinstance(handler, logging.FileHandler):
+                handler.close()
+                logging.root.removeHandler(handler)
+
         # Clear logs
         for log_file in output_root.glob("*.log"):
-            log_file.unlink(missing_ok=True)
+            try:
+                log_file.unlink(missing_ok=True)
+            except PermissionError:
+                print(f"⚠️ Could not delete {log_file} (still in use)")
 
         print(f"✅ Cleanup complete")
 

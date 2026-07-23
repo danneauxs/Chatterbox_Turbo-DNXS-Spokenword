@@ -1,0 +1,200 @@
+  # Turbo TTS Speed Optimization Program
+
+  ## Summary
+
+  Target: improve measured 3.7–4.4× real-time performance toward 8–10× while preserving VADER behavior,
+  sentence/paragraph pauses, intelligibility, and voice quality.
+
+  Use selectable backends and safe fallbacks. S3Gen one-step mode becomes a GUI experiment, defaulting to
+  current two-step behavior.
+
+  ## Key Changes
+
+  ### 1. Correct voice-conditioning cache
+
+  The current “prewarm” computes conditionals once, but every chunk passes audio_prompt_path again, causing
+  recomputation.
+
+  Change flow:
+
+  - Prepare conditionals once after model/voice selection.
+  - Cache by voice path, file modification time, normalization setting, and exaggeration.
+  - Call later generate() operations without audio_prompt_path.
+  - Invalidate cache when voice or relevant conditioning settings change.
+  - Keep model reload and cleanup behavior safe.
+
+  Add timing logs proving whether each chunk uses cached or freshly computed conditionals.
+
+  ### 2. GUI-controlled S3Gen flow steps
+
+  Expose:
+
+  S3Gen flow steps: 1 / 2
+
+  Behavior:
+
+  - Default: 2.
+  - User-selectable per run.
+  - Persist setting in project configuration.
+  - Pass value through GUI → interface → TTS engine → model.generate() → s3gen.inference().
+  - Log selected value at run start and per-stage benchmark output.
+  - Preserve fallback to 2 if one-step generation fails.
+
+  Acceptance test:
+
+  - Same text, voice, seed, and GPU.
+  - Compare n_cfm_timesteps=1 versus 2.
+  - Measure T3 time, S3Gen time, total time, RTF, ASR accuracy, and listening quality.
+
+  ### 3. Chunk-size optimization without breaking VADER or pauses
+
+  Do not merge chunks indiscriminately.
+
+  Non-VADER mode:
+
+  - Add larger sentence-safe chunk presets.
+  - Test approximately 300, 500, and 800 characters.
+  - Preserve paragraph/sentence boundary metadata.
+  - Apply pauses after generation exactly as before.
+
+  VADER mode:
+
+  - Retain chunk-local TTS parameters.
+  - Do not combine adjacent chunks with different effective parameters.
+  - Initially keep existing VADER chunking as control.
+  - Add optional parameter-homogeneous grouping only later, after proving that VADER outputs are unchanged.
+
+  Pause behavior remains separate from synthesis chunk size. Boundary metadata must continue driving comma,
+  sentence, paragraph, chapter, and configured silence insertion.
+
+  ### 4. Clarify and redesign micro-batching
+
+  Current process_batch() is not true model batching. It receives groups of chunks but falls back to calling
+  process_one_chunk() individually because generate_batch() does not exist. ENABLE_MICRO_BATCHING only gates
+  an attempted API; enabling it alone will not improve speed.
+
+  Plan:
+
+  - Rename/log current behavior as “dispatch grouping” to avoid confusion.
+  - Keep it disabled until a real batch implementation exists.
+  - Prototype T3-only padded batching with fixed text-token buckets.
+  - Keep S3Gen batch size one initially because its implementation documents batch-size-one assumptions.
+  - Measure whether T3 batching helps enough to justify separate sequential S3Gen decoding.
+  - Never batch chunks with incompatible voice conditionals, TTS parameters, or pause metadata.
+
+  Do not remove the GPU inference lock until profiling proves the model is thread-safe.
+
+  ### 5. Compile the actual T3 hot path
+
+  Compile t3.tfmr, the transformer called repeatedly by inference_turbo().
+
+  Implementation:
+
+  - Compile once during model load.
+  - Use fixed token-length buckets where possible.
+  - Start with torch.compile(..., mode="reduce-overhead").
+  - Test default and max-autotune.
+  - Exclude compilation and warmup from production timing.
+  - Record graph breaks and recompilations.
+  - Retain eager fallback if compilation fails.
+
+  Do not rely on generic compilation of t3.forward() or s3gen.forward() unless stage profiling demonstrates
+  benefit.
+
+  ### 6. Precision experiments
+
+  Split precision controls by component:
+
+  - T3 FP16.
+  - S3Gen estimator FP16/BF16 experiment.
+  - HiFi-GAN/vocoder FP32 initially.
+  - Voice encoder FP32.
+  - Keep FP32 retry path for numerical failures.
+
+  Benchmark each precision mode against a fixed reference set and reject modes producing audible artifacts,
+  invalid probability tensors, clipping, or ASR regressions.
+
+  ### 7. ONNX/TensorRT backend
+
+  Implement ONNX as a selectable backend with PyTorch fallback.
+
+  Stages:
+
+  1. Verify official Turbo ONNX assets and model revisions.
+  2. Add CUDA Execution Provider detection.
+  3. Add TensorRT provider detection where installed.
+  4. Test official FP16, Q8, Q4, and Q4-F16 graphs.
+  5. Reuse cached voice-conditioning data.
+  6. Benchmark T3 token generation and conditional decoder separately.
+  7. Integrate only after standalone output matches PyTorch acceptably.
+  8. Fall back automatically to PyTorch when provider initialization, model loading, or generation fails.
+
+  Required diagnostics:
+
+  - Active backend.
+  - ONNX provider list.
+  - GPU device.
+  - Model variant.
+  - Per-stage timings.
+  - Fallback reason.
+
+  The existing CPU-only ONNX installation must not be treated as a valid GPU benchmark.
+
+  ## Public Interfaces
+
+  Add:
+
+  n_cfm_timesteps: int = 2
+  backend: str = "pytorch"
+  compile_t3: bool = False
+  s3gen_precision: str = "fp32"
+
+  Expose these through configuration and GUI controls.
+
+  Add benchmark output containing:
+
+  voice_conditioning_seconds
+  t3_seconds
+  s3gen_seconds
+  watermark_seconds
+  postprocess_seconds
+  total_seconds
+  audio_seconds
+  realtime_factor
+  backend
+  precision
+  n_cfm_timesteps
+
+  ## Test Plan
+
+  Use fixed text, fixed voice, fixed seed, and identical GPU conditions.
+
+  Test matrix:
+
+  - Cached versus uncached voice conditioning.
+  - S3Gen steps 1 versus 2.
+  - Chunk sizes 300, 500, and 800.
+  - VADER disabled versus enabled.
+  - T3 eager versus compiled.
+  - S3Gen FP32 versus FP16/BF16.
+  - PyTorch versus ONNX FP16/Q8/Q4.
+  - CUDA Execution Provider versus TensorRT where available.
+
+  Quality gates:
+
+  - ASR transcript similarity.
+  - No missing or duplicated sentences.
+  - Correct pause placement.
+  - No clipping, silence loss, or audible boundary artifacts.
+  - Human listening comparison for representative narration, dialogue, punctuation, and emotional passages.
+
+  Optimization is accepted only when speed improves and ASR/listening quality remains acceptable.
+
+  ## Assumptions
+
+  - Existing VADER parameter behavior remains authoritative.
+  - Existing pause insertion semantics must not change.
+  - S3Gen one-step mode is experimental and defaults to two steps.
+  - PyTorch remains the guaranteed fallback backend.
+  - No true parallel GPU inference is assumed until profiling proves safety.
+  - ONNX/TensorRT integration is pursued after standalone runtime validation.

@@ -79,33 +79,35 @@ def ffmpeg_error_message():
 # ============================================================================
 
 def list_voice_samples():
-    """List available voice samples"""
-    return sorted(VOICE_SAMPLES_DIR.glob("*.wav"), key=lambda x: x.stem.lower())
+    """List supported reference-audio files stored in the Voice_Samples directory."""
+    supported_extensions = {".wav", ".mp3", ".flac", ".m4a", ".ogg"}
+    return sorted(
+        (path for path in VOICE_SAMPLES_DIR.iterdir() if path.suffix.lower() in supported_extensions),
+        key=lambda path: path.stem.lower(),
+    )
 
 def ensure_voice_sample_compatibility(input_path, output_dir=None):
-    """Ensure voice sample is compatible with TTS (24kHz mono)"""
-    input_path = str(input_path)
-    ext = os.path.splitext(input_path)[1].lower()
-    basename = os.path.splitext(os.path.basename(input_path))[0]
-    output_dir = output_dir or os.path.dirname(input_path)
-    output_path = os.path.join(output_dir, basename + "_ttsready.wav")
+    """Write a 24kHz mono _ttsready WAV copy for every selected voice sample."""
+    input_path = Path(input_path)
+    output_dir = Path(output_dir) if output_dir else input_path.parent
+    basename = input_path.stem
+    output_name = basename if basename.endswith("_ttsready") else f"{basename}_ttsready"
+    output_path = output_dir / f"{output_name}.wav"
 
-    try:
-        info = sf.info(input_path)
-        if (ext == '.wav' and info.samplerate == 24000 and info.channels == 1):
-            return input_path
-    except Exception:
-        pass
+    # A TTS-ready file already in its destination needs no self-conversion.
+    if input_path.resolve() == output_path.resolve():
+        return str(output_path)
 
+    output_dir.mkdir(parents=True, exist_ok=True)
     cmd = [
         "ffmpeg", "-y",
-        "-i", input_path,
+        "-i", str(input_path),
         "-ar", "24000",
         "-ac", "1",
-        output_path
+        str(output_path)
     ]
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return output_path
+    return str(output_path)
 
 # ============================================================================
 # FFMPEG OPERATIONS

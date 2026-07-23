@@ -42,9 +42,9 @@ CYAN = "\033[96m"
 # ============================================================================
 # TEXT PROCESSING SETTINGS
 # ============================================================================
-MAX_CHUNK_WORDS = 28
+MAX_CHUNK_WORDS = 100
 MIN_CHUNK_WORDS = 4
-CHUNKING_QUALITY = "Low"
+CHUNKING_QUALITY = "High"
 
 # ============================================================================
 # WORKER AND PERFORMANCE SETTINGS

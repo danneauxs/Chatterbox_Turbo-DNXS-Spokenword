@@ -3365,23 +3365,30 @@ class ChatterboxMainWindow(QMainWindow):
             from modules.voice_detector import get_likely_voices_for_book
             likely_voices = get_likely_voices_for_book(book_name, json_path)
 
-            # Clear and populate voice combo with ONLY likely candidates
+            # Clear and populate with book TTS copies and Voice_Samples options.
             self.repair_voice_combo.clear()
 
-            # Always start with placeholder - no auto-selection
+            # Keep a placeholder when JSON does not identify a matching voice.
             self.repair_voice_combo.addItem("-- Please Select Voice --", None)
 
             if likely_voices:
-                # Add detected voice candidates (but don't auto-select any)
-                for voice_name, voice_path, detection_method in likely_voices:
+                selected_voice = None
+                for combo_index, (voice_name, voice_path, detection_method) in enumerate(likely_voices, start=1):
                     display_text = f"{voice_name} ({detection_method})"
                     self.repair_voice_combo.addItem(display_text, (voice_name, voice_path, detection_method))
+                    if detection_method == "json_metadata":
+                        selected_voice = (combo_index, voice_name, voice_path)
 
-                # Clear current selection - force user choice
-                self.current_repair_voice_name = None
-                self.current_repair_voice_path = None
-
-                info_text = f"✅ Found {len(likely_voices)} candidate(s). Please select voice before resynthesizing."
+                if selected_voice:
+                    combo_index, voice_name, voice_path = selected_voice
+                    self.repair_voice_combo.setCurrentIndex(combo_index)
+                    self.current_repair_voice_name = voice_name
+                    self.current_repair_voice_path = voice_path
+                    info_text = f"✅ Auto-selected {voice_name} from JSON metadata."
+                else:
+                    self.current_repair_voice_name = None
+                    self.current_repair_voice_path = None
+                    info_text = f"✅ Found {len(likely_voices)} candidate(s). Please select voice before resynthesizing."
                 self.repair_voice_info.setText(info_text)
                 self.repair_voice_info.setStyleSheet("background-color: #d4edda; padding: 5px; border: 1px solid #c3e6cb; color: #155724;")
 
